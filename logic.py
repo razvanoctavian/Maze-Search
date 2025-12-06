@@ -1,11 +1,12 @@
 class Node:
     """
-    Reprezintă un nod din algoritmul de căutare.
+    Represents a node in the search tree.
 
-    Atribute:
-    - state: poziția curentă (row, col)
-    - parent: nodul părinte (pentru reconstrucția drumului)
-    - action: acțiunea care a dus la acest nod (nesemnificativă aici)
+    Attributes:
+        state: current position in the maze (row, col)
+        parent: reference to the previous Node in the path
+        action: the move that led from parent.state to this state
+                (optional, useful if you want a list of actions)
     """
     def __init__(self, state, parent, action):
         self.state = state
@@ -17,33 +18,47 @@ class Node:
 
 class StackFrontier:
     """
-    Frontieră de tip stivă (stack), folosită pentru algoritmul DFS.
+    Frontier implemented as a stack.
 
-    Caracteristică:
-    - remove() → scoate ultimul element (LIFO)
+    Used for Depth-First Search (DFS).
+
+    Behavior:
+        - add(): pushes a node to the end of the list
+        - remove(): pops the last node (LIFO: Last-In, First-Out)
     """
 
     def __init__(self):
+        # list of nodes currently in the frontier
         self.frontier = []
 
     def add(self, node):
-        """Adaugă nodul la finalul frontierei."""
+        """Add a node to the frontier."""
         self.frontier.append(node)
 
     def contains_state(self, state):
-        """Verifică dacă starea există deja în frontieră."""
+        """
+        Check if there is already a node with the given state
+        somewhere in the frontier.
+        """
         return any(node.state == state for node in self.frontier)
 
     def empty(self):
-        """True dacă frontiera nu conține noduri."""
+        """Return True if the frontier is empty."""
         return len(self.frontier) == 0
 
     def remove(self):
-        """Scoate ultimul nod din frontieră (LIFO)."""
+        """
+        Remove and return the last node in the frontier
+        (LIFO behavior, like a stack).
+
+        Raises:
+            Exception: if the frontier is empty.
+        """
         if self.empty():
             raise Exception("empty frontier")
-        
-        node = self.frontier[-1]        # ultimul nod
+
+        node = self.frontier[-1]
+        # shrink the list by removing the last element
         self.frontier = self.frontier[:-1]
         return node
 
@@ -52,18 +67,28 @@ class StackFrontier:
 
 class QueueFrontier(StackFrontier):
     """
-    Frontieră de tip coadă (queue), folosită pentru algoritmul BFS.
+    Frontier implemented as a queue.
 
-    Caracteristică:
-    - remove() → scoate primul element (FIFO)
+    Used for Breadth-First Search (BFS).
+
+    Behavior:
+        - add(): appends to the end (inherited)
+        - remove(): removes from the beginning (FIFO)
     """
 
     def remove(self):
-        """Scoate primul nod din frontieră (FIFO)."""
+        """
+        Remove and return the first node in the frontier
+        (FIFO behavior, like a queue).
+
+        Raises:
+            Exception: if the frontier is empty.
+        """
         if self.empty():
             raise Exception("empty frontier")
-        
+
         node = self.frontier[0]
+        # remove the first element
         self.frontier = self.frontier[1:]
         return node
 
@@ -72,34 +97,45 @@ class QueueFrontier(StackFrontier):
 
 class GreedyFrontier(StackFrontier):
     """
-    Frontieră pentru algoritmul Greedy Best-First Search (GBFS).
+    Frontier for Greedy Best-First Search (GBFS).
 
-    Selectează nodul cu cea mai mică euristică h(n),
-    unde h(n) = distanța Manhattan până la celula goal.
+    Instead of using pure LIFO/FIFO, it always selects the node
+    with the smallest heuristic value h(n), where:
+
+        h(n) = Manhattan distance from n to the goal cell.
     """
 
     def __init__(self, maze):
         super().__init__()
+        # maze is needed to know where the goal is
         self.maze = maze
 
     def heuristic(self, state):
-        """Distanța Manhattan până la goal."""
+        """
+        Compute the Manhattan distance between the given state
+        and the goal position.
+
+        state: (row, col)
+        """
         r, c = state
         gr, gc = self.maze.goal
         return abs(r - gr) + abs(c - gc)
 
     def remove(self):
         """
-        Scoate nodul cu cea mai mică valoare a euristicii h(n).
+        Remove and return the node with the smallest heuristic h(n).
+
+        Raises:
+            Exception: if the frontier is empty.
         """
         if self.empty():
             raise Exception("empty frontier")
 
-        # presupunem că primul este cel mai bun
+        # assume the first node is the best
         best_index = 0
         best_h = self.heuristic(self.frontier[0].state)
 
-        # căutăm nodul cu h minim
+        # search for a node with a smaller h
         for i in range(len(self.frontier)):
             h_value = self.heuristic(self.frontier[i].state)
             if h_value < best_h:
@@ -115,17 +151,25 @@ class GreedyFrontier(StackFrontier):
 
 class AStarFrontier(GreedyFrontier):
     """
-    Frontieră pentru algoritmul A*.
+    Frontier for the A* search algorithm.
 
-    Selectează nodul cu valoarea minimă a funcției:
+    Inherits the heuristic from GreedyFrontier and adds a cost function g(n).
+    It always selects the node with the smallest evaluation function:
+
         f(n) = g(n) + h(n)
 
-    - g(n): costul (număr de pași) de la start la nodul n
-    - h(n): distanța Manhattan până la goal
+    where:
+        g(n) = cost from start to n (number of steps)
+        h(n) = Manhattan distance from n to goal
     """
 
     def g(self, node):
-        """Calculează g(n) urcând prin părinți până la start."""
+        """
+        Compute g(n): the path cost from the start node to the given node.
+
+        We walk back through the parent chain and count how many steps
+        we need to reach the start.
+        """
         cost = 0
         current = node
 
@@ -136,12 +180,19 @@ class AStarFrontier(GreedyFrontier):
         return cost
 
     def f(self, node):
-        """Funcția de evaluare A*: f(n) = g(n) + h(n)."""
+        """
+        A* evaluation function:
+
+            f(n) = g(n) + h(n)
+        """
         return self.g(node) + self.heuristic(node.state)
 
     def remove(self):
         """
-        Scoate nodul cu cea mai mică valoare a funcției f(n).
+        Remove and return the node with the smallest f(n).
+
+        Raises:
+            Exception: if the frontier is empty.
         """
         if self.empty():
             raise Exception("empty frontier")
@@ -149,7 +200,7 @@ class AStarFrontier(GreedyFrontier):
         best_index = 0
         best_f = self.f(self.frontier[0])
 
-        # căutăm nodul cu f minim
+        # search for a node with a smaller f
         for i in range(len(self.frontier)):
             f_value = self.f(self.frontier[i])
             if f_value < best_f:
